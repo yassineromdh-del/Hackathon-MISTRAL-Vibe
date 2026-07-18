@@ -1,0 +1,16 @@
+[
+  {
+    "tool": "gitleaks",
+    "id": "jwt-placeholder-env-example",
+    "what": "JWT header placeholder (eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...) in the old .env.example, commit 002bb0f",
+    "why": "Documentation placeholder — the standard JWT header prefix, not a real credential. Frozen in git history.",
+    "where": ".gitleaks.toml → allowlist regex"
+  },
+  {
+    "tool": "gitleaks",
+    "id": "vendored-paths",
+    "what": "node_modules/, dist/ and package-lock.json excluded from secret scanning",
+    "why": "Generated/vendored files — integrity hashes trigger entropy-based rules with no real secrets.",
+    "where": ".gitleaks.toml → allowlist paths"
+  }
+]
