@@ -103,6 +103,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      issues: write
     steps:
       - name: Checkout code
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
@@ -227,6 +228,18 @@ jobs:
           git push --force -q \
             "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${GITHUB_REPOSITORY}.git" \
             gate-reports
+
+      - name: Self-healing — open fix-prompt issue when blocked
+        if: needs.semgrep.result != 'success' || needs.gitleaks.result != 'success' || needs.trivy.result != 'success'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: python3 .github/scripts/security_gate_bot.py open report/latest.json
+
+      - name: Self-healing — close fixed issues when green
+        if: needs.semgrep.result == 'success' && needs.gitleaks.result == 'success' && needs.trivy.result == 'success'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: python3 .github/scripts/security_gate_bot.py close
 
       - name: Evaluate gate
         run: |
