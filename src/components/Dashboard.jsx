@@ -1,10 +1,13 @@
 import { useCallback, useEffect, useState } from 'react'
 import { LogOut, RefreshCw, ShieldCheck, ShieldAlert, SearchCode, KeyRound, Package } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
-import { fetchWorkflowRuns, fetchRunJobs } from '../lib/githubApi'
+import { fetchWorkflowRuns, fetchRunJobs, fetchGateReport } from '../lib/githubApi'
 import { REPO_OWNER, REPO_NAME } from '../lib/constants'
 import StatusBadge, { statusOf } from './StatusBadge'
 import RunsTable from './RunsTable'
+import FindingsPanel from './FindingsPanel'
+
+const REFRESH_INTERVAL_MS = 30_000
 
 const TOOLS = [
   { key: 'semgrep', match: 'semgrep', title: 'Semgrep', subtitle: 'SAST — code patterns', Icon: SearchCode },
@@ -23,6 +26,7 @@ export default function Dashboard() {
   const { user, role, signOut } = useAuth()
   const [runs, setRuns] = useState([])
   const [latestJobs, setLatestJobs] = useState([])
+  const [report, setReport] = useState(null)
   const [error, setError] = useState(null)
   const [refreshing, setRefreshing] = useState(true)
 
@@ -30,6 +34,7 @@ export default function Dashboard() {
     setRefreshing(true)
     setError(null)
     try {
+      fetchGateReport().then(setReport).catch(() => {})
       const workflowRuns = await fetchWorkflowRuns()
       setRuns(workflowRuns)
       if (workflowRuns[0]) {
@@ -48,7 +53,11 @@ export default function Dashboard() {
     }
   }, [])
 
-  useEffect(() => { load() }, [load])
+  useEffect(() => {
+    load()
+    const interval = setInterval(load, REFRESH_INTERVAL_MS)
+    return () => clearInterval(interval)
+  }, [load])
 
   const latestRun = runs[0]
   const gateStatus = statusOf(latestRun)
@@ -156,6 +165,8 @@ export default function Dashboard() {
           )
         })}
       </section>
+
+      <FindingsPanel report={report} />
 
       <RunsTable runs={runs} loading={refreshing} />
     </div>

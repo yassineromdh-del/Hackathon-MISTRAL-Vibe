@@ -1,50 +1,28 @@
 title = "Gitleaks Hackathon Config"
 
+# Keep the full default ruleset (GitHub/AWS/Stripe tokens, private keys, JWTs,
+# generic API keys…) and add project-specific rules on top.
+[extend]
+useDefault = true
+
 [allowlist]
-  description = "Global allowlist"
-  paths = [
-    '''node_modules/''',
-    '''dist/''',
-    '''\.git/''',
-    '''\.github/workflows/'''
-  ]
+description = "Global allowlist"
+paths = [
+  '''node_modules/''',
+  '''dist/''',
+  '''package-lock\.json''',
+]
+# JWT header placeholder used in the old .env.example (commit 002bb0f) — not a secret
+regexes = ['''eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9\.\.\.''']
 
 [[rules]]
-  description = "GitHub Token"
-  regex = '''(?i)(github|ghp|gho|ghu|ghs|ghr)_[a-zA-Z0-9_]{36,}'''
-  tags = ["github", "token"]
+id = "supabase-secret-key"
+description = "Supabase secret / service-role key"
+regex = '''sb_secret_[a-zA-Z0-9_\-]{20,}'''
+tags = ["supabase", "key"]
 
 [[rules]]
-  description = "Generic API Key"
-  regex = '''(?i)(api[_-]?key|apikey|api[_-]?secret)['\"][=: ]+['\"]?[a-zA-Z0-9_\-]{32,}'''
-  tags = ["api", "key"]
-
-[[rules]]
-  description = "AWS Access Key"
-  regex = '''(?i)AKIA[0-9A-Z]{16}'''
-  tags = ["aws", "key"]
-
-[[rules]]
-  description = "Stripe Key"
-  regex = '''(?i)(stripe|sk|pk)_[a-zA-Z0-9_]{24,}'''
-  tags = ["stripe", "key"]
-
-[[rules]]
-  description = "Supabase Key"
-  regex = '''(?i)(supabase|sb)_[a-zA-Z0-9_\-]{30,}'''
-  tags = ["supabase", "key"]
-
-[[rules]]
-  description = "Generic Secret"
-  regex = '''(?i)(secret|password|passwd|pwd)['\"][=: ]+['\"]?[a-zA-Z0-9_\-!@#$%^&*]{8,}'''
-  tags = ["secret", "password"]
-
-[[rules]]
-  description = "Bearer Token"
-  regex = '''(?i)bearer[ :]+[a-zA-Z0-9_\-\.]{20,}'''
-  tags = ["token", "bearer"]
-
-[[rules]]
-  description = "Private Key"
-  regex = '''-----BEGIN (RSA |EC |DSA |OPENSSH )?PRIVATE KEY-----'''
-  tags = ["key", "private"]
+id = "supabase-legacy-service-role"
+description = "Supabase legacy service_role JWT"
+regex = '''eyJ[A-Za-z0-9_\-]+\.eyJ[^"']*service_role[^"']*\.[A-Za-z0-9_\-]+'''
+tags = ["supabase", "jwt"]

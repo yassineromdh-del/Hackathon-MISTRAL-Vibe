@@ -38,6 +38,17 @@ export async function fetchRunJobs(runId) {
   return data.jobs ?? []
 }
 
+// Published by the gate job on the `gate-reports` branch; raw.githubusercontent
+// sends CORS headers, unlike the Actions artifact download endpoint.
+export async function fetchGateReport() {
+  const res = await fetch(
+    `https://raw.githubusercontent.com/${REPO_OWNER}/${REPO_NAME}/gate-reports/latest.json?t=${Date.now()}`,
+    { cache: 'no-store' }
+  )
+  if (!res.ok) return null
+  return res.json()
+}
+
 export async function fetchUserRole(username) {
   if (!username) return ROLES.GUEST
   try {
