@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { LogOut, RefreshCw, ShieldCheck, ShieldAlert, SearchCode, KeyRound, Package } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import { fetchWorkflowRuns, fetchRunJobs, fetchGateReport } from '../lib/githubApi'
-import { REPO_OWNER, REPO_NAME } from '../lib/constants'
+import { getRepo, setRepo } from '../lib/repo'
 import StatusBadge, { statusOf } from './StatusBadge'
 import RunsTable from './RunsTable'
 import FindingsPanel from './FindingsPanel'
@@ -14,6 +14,12 @@ const TOOLS = [
   { key: 'gitleaks', match: 'gitleaks', title: 'Gitleaks', subtitle: 'Secrets detection', Icon: KeyRound },
   { key: 'trivy', match: 'trivy', title: 'Trivy', subtitle: 'Dependency vulnerabilities', Icon: Package },
 ]
+
+// Grade tone follows the status palette; the letter itself carries the value.
+const GRADE_STYLES = {
+  'A+': 'text-status-good', A: 'text-status-good', B: 'text-status-warning',
+  C: 'text-status-serious', D: 'text-status-critical', F: 'text-status-critical',
+}
 
 const ROLE_STYLES = {
   maintainer: 'bg-accent/15 text-accent',
@@ -29,6 +35,8 @@ export default function Dashboard() {
   const [report, setReport] = useState(null)
   const [error, setError] = useState(null)
   const [refreshing, setRefreshing] = useState(true)
+  const [repo, setRepoState] = useState(getRepo().full)
+  const [editingRepo, setEditingRepo] = useState(false)
 
   const load = useCallback(async () => {
     setRefreshing(true)
@@ -73,7 +81,37 @@ export default function Dashboard() {
       <header className="flex items-center justify-between mb-8">
         <div>
           <h1 className="text-xl font-semibold">Zero-to-Prod</h1>
-          <p className="text-ink-muted text-xs font-mono mt-0.5">{REPO_OWNER}/{REPO_NAME}</p>
+          {editingRepo ? (
+            <form
+              onSubmit={(e) => {
+                e.preventDefault()
+                const value = new FormData(e.target).get('repo')
+                if (setRepo(value)) {
+                  setRepoState(getRepo().full)
+                  setReport(null)
+                  setEditingRepo(false)
+                  load()
+                }
+              }}
+            >
+              <input
+                name="repo"
+                defaultValue={repo}
+                autoFocus
+                onBlur={() => setEditingRepo(false)}
+                placeholder="owner/repo"
+                className="mt-0.5 bg-page border border-line rounded px-1.5 py-0.5 text-xs font-mono text-ink w-64 focus:outline-none focus:border-accent"
+              />
+            </form>
+          ) : (
+            <button
+              onClick={() => setEditingRepo(true)}
+              title="Changer de repo surveillé"
+              className="text-ink-muted text-xs font-mono mt-0.5 hover:text-accent transition-colors"
+            >
+              {repo} ✎
+            </button>
+          )}
         </div>
         <div className="flex items-center gap-3">
           <span className={`text-xs font-medium px-2.5 py-1 rounded-full capitalize ${ROLE_STYLES[role]}`}>
@@ -122,7 +160,13 @@ export default function Dashboard() {
               )}
             </div>
           </div>
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-6">
+            {report?.grade && (
+              <div className="text-right">
+                <p className={`text-4xl font-semibold ${GRADE_STYLES[report.grade] ?? 'text-ink'}`}>{report.grade}</p>
+                <p className="text-ink-muted text-xs">security score {report.score}/100</p>
+              </div>
+            )}
             <div className="text-right hidden sm:block">
               <p className="text-2xl font-semibold">{completedCount ? `${passedCount}/${completedCount}` : '—'}</p>
               <p className="text-ink-muted text-xs">runs passed (last {runs.length || '—'})</p>

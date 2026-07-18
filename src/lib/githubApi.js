@@ -1,4 +1,5 @@
-import { GITHUB_API_BASE, REPO_OWNER, REPO_NAME, WORKFLOW_FILE, PERMISSION_TO_ROLE, ROLES } from './constants'
+import { GITHUB_API_BASE, WORKFLOW_FILE, PERMISSION_TO_ROLE, ROLES } from './constants'
+import { getRepo } from './repo'
 
 // Token priority: OAuth token from the GitHub login session, then a local
 // dev token from .env, then unauthenticated (public repos, 60 req/h).
@@ -28,13 +29,13 @@ async function ghFetch(path) {
 
 export async function fetchWorkflowRuns(perPage = 20) {
   const data = await ghFetch(
-    `/repos/${REPO_OWNER}/${REPO_NAME}/actions/workflows/${WORKFLOW_FILE}/runs?per_page=${perPage}`
+    `/repos/${getRepo().full}/actions/workflows/${WORKFLOW_FILE}/runs?per_page=${perPage}`
   )
   return data.workflow_runs ?? []
 }
 
 export async function fetchRunJobs(runId) {
-  const data = await ghFetch(`/repos/${REPO_OWNER}/${REPO_NAME}/actions/runs/${runId}/jobs`)
+  const data = await ghFetch(`/repos/${getRepo().full}/actions/runs/${runId}/jobs`)
   return data.jobs ?? []
 }
 
@@ -43,7 +44,7 @@ export async function fetchRunJobs(runId) {
 // CDN cache (raw lags up to ~5 min behind the branch).
 export async function fetchGateReport() {
   const res = await fetch(
-    `${GITHUB_API_BASE}/repos/${REPO_OWNER}/${REPO_NAME}/contents/latest.json?ref=gate-reports`,
+    `${GITHUB_API_BASE}/repos/${getRepo().full}/contents/latest.json?ref=gate-reports`,
     { headers: { ...authHeaders(), Accept: 'application/vnd.github.raw+json' }, cache: 'no-store' }
   )
   if (!res.ok) return null
@@ -54,7 +55,7 @@ export async function fetchUserRole(username) {
   if (!username) return ROLES.GUEST
   try {
     const data = await ghFetch(
-      `/repos/${REPO_OWNER}/${REPO_NAME}/collaborators/${username}/permission`
+      `/repos/${getRepo().full}/collaborators/${username}/permission`
     )
     return PERMISSION_TO_ROLE[data.permission] ?? ROLES.VIEWER
   } catch {

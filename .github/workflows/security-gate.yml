@@ -201,7 +201,23 @@ jobs:
                   'remediation': "Rotate the secret immediately, move it to an environment variable, purge it from git history (git filter-repo), then re-run the gate.",
               })
 
+          # Vibe Security Score: 100 minus severity-weighted penalties.
+          def weight(sev):
+              return {'CRITICAL': 40, 'ERROR': 40, 'HIGH': 20,
+                      'MEDIUM': 5, 'WARNING': 5, 'LOW': 1, 'INFO': 1}.get(sev or '', 5)
+
+          penalty = sum(weight(f['severity']) for f in findings)
+          penalty += sum(weight(v['severity']) for v in vulns)
+          penalty += sum(weight(l['severity']) for l in leaks)
+          penalty += 2 * len(waivers)  # a documented waiver still carries residual risk
+          score = max(0, 100 - penalty)
+          grade = next(g for g, t in
+                       [('A+', 95), ('A', 85), ('B', 70), ('C', 50), ('D', 30), ('F', -1)]
+                       if score >= t)
+
           report = {
+              'score': score,
+              'grade': grade,
               'sha': os.environ.get('GITHUB_SHA'),
               'run_id': os.environ.get('GITHUB_RUN_ID'),
               'generated_at': datetime.datetime.now(datetime.timezone.utc).isoformat(),
@@ -218,7 +234,40 @@ jobs:
           os.makedirs('report', exist_ok=True)
           with open('report/latest.json', 'w') as f:
               json.dump(report, f, indent=1)
-          print(f"report: {len(findings)} semgrep findings, {len(vulns)} trivy vulns, {len(leaks)} leaks")
+          print(f"report: grade {grade} ({score}/100) — {len(findings)} semgrep findings, {len(vulns)} trivy vulns, {len(leaks)} leaks")
+
+          # Professional run summary rendered by GitHub above the raw logs.
+          summary_path = os.environ.get('GITHUB_STEP_SUMMARY')
+          if summary_path:
+              ok = all(v == 'success' for v in report['jobs'].values())
+              tone = {'A+': '🟢', 'A': '🟢', 'B': '🟡', 'C': '🟠', 'D': '🔴', 'F': '🔴'}[grade]
+              rows = []
+              for f in findings:
+                  rows.append(('Semgrep', f['severity'], f"`{f['rule'].split('.')[-1]}`",
+                               f"`{f['file']}:{f['line']}`", f['remediation']))
+              for v in vulns:
+                  rows.append(('Trivy', v['severity'], f"`{v['id']}`",
+                               f"`{v['package']} {v['installed']}`", v['remediation']))
+              for l in leaks:
+                  rows.append(('Gitleaks', l['severity'], f"`{l['rule']}`",
+                               f"`{l['file']}:{l['line']}`", l['remediation']))
+              with open(summary_path, 'a') as s:
+                  s.write(f"# 🛡️ Security Gate — {'OPEN ✅' if ok else 'BLOCKED ⛔'}\n\n")
+                  s.write(f"## {tone} Vibe Security Score: **{grade}** ({score}/100)\n\n")
+                  s.write(f"Commit `{report['sha'][:7]}` · {len(rows)} finding(s) · {len(waivers)} waiver(s)\n\n")
+                  s.write("| Scan | Verdict |\n|---|---|\n")
+                  for k, v in report['jobs'].items():
+                      s.write(f"| {k.capitalize()} | {'✅' if v == 'success' else '❌'} {v} |\n")
+                  if rows:
+                      s.write("\n## Findings\n\n| Outil | Sévérité | Règle | Localisation | Remédiation |\n|---|---|---|---|---|\n")
+                      for r in rows[:30]:
+                          s.write('| ' + ' | '.join(str(c).replace('|', '\\|') for c in r) + ' |\n')
+                  if waivers:
+                      s.write("\n<details><summary>Faux positifs assumés (waivers)</summary>\n\n")
+                      s.write("| Outil | Quoi | Pourquoi |\n|---|---|---|\n")
+                      for w in waivers:
+                          s.write(f"| {w.get('tool')} | {w.get('what')} | {w.get('why')} |\n")
+                      s.write("\n</details>\n")
           EOF
 
       - name: Publish report to gate-reports branch

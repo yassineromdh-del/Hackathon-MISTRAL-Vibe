@@ -1,5 +1,8 @@
 # Zero-to-Prod — Security Gate Dashboard
 
+![Security Gate](https://github.com/yassineromdh-del/Hackathon-MISTRAL-Vibe/actions/workflows/security-gate.yml/badge.svg?branch=main)
+![Vibe Security Score](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fraw.githubusercontent.com%2Fyassineromdh-del%2FHackathon-MISTRAL-Vibe%2Fgate-reports%2Flatest.json&query=%24.grade&label=vibe%20security%20score&color=2a78d6)
+
 Micro-SaaS built for the **"Zero-to-Prod in 8 Hours: Security-Native Vibe Coding"** hackathon:
 the entire app is built through AI conversation, and every commit must pass an automated
 security gate (Semgrep + Gitleaks + Trivy) before merge — no manual code review, only
