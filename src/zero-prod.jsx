@@ -10,8 +10,13 @@ import {
   Lock,
   Github,
   Loader2,
+  Crown,
+  User,
+  Eye,
+  Pencil,
 } from "lucide-react";
 import { useAuth } from "./context/AuthContext.jsx";
+import { ROLES } from "./lib/constants";
 
 /* ------------------------------------------------------------------ */
 /* NOTE FOR YACINE:                                                    */
@@ -106,7 +111,29 @@ function GateDot({ state }) {
   );
 }
 
-function TopNav({ page, navigate, connected, user, signOut }) {
+function RoleBadge({ role }) {
+  const roleConfig = {
+    [ROLES.MAINTAINER]: { label: 'MAINTAINER', icon: Crown, color: '#F5A623' },
+    [ROLES.CONTRIBUTOR]: { label: 'CONTRIBUTOR', icon: Pencil, color: '#5B8DEF' },
+    [ROLES.VIEWER]: { label: 'VIEWER', icon: Eye, color: '#565C69' },
+    [ROLES.GUEST]: { label: 'GUEST', icon: User, color: '#3E434F' },
+  };
+
+  const config = roleConfig[role] || roleConfig[ROLES.GUEST];
+  const Icon = config.icon;
+
+  return (
+    <span
+      className="flex items-center gap-1.5 font-mono text-[10px]"
+      style={{ color: config.color }}
+    >
+      <Icon size={11} />
+      {config.label}
+    </span>
+  );
+}
+
+function TopNav({ page, navigate, connected, user, signOut, role, isMaintainer }) {
   return (
     <div
       className="w-full flex items-center justify-between px-6 py-4 sticky top-0 z-10"
@@ -126,12 +153,15 @@ function TopNav({ page, navigate, connected, user, signOut }) {
       </button>
       <div className="flex items-center gap-4">
         {connected && page !== "landing" && user && (
-          <span
-            className="font-mono text-[10px] tracking-wider hidden sm:block"
-            style={{ color: "#565C69" }}
-          >
-            {user.email || user.user_metadata?.user_name || 'user'} / cyberclear-platform
-          </span>
+          <>
+            <span
+              className="font-mono text-[10px] tracking-wider hidden md:block"
+              style={{ color: "#565C69" }}
+            >
+              {user.email || user.user_metadata?.user_name || user.user_metadata?.login || 'user'}
+            </span>
+            <RoleBadge role={role} />
+          </>
         )}
         {connected ? (
           <>
@@ -463,7 +493,7 @@ function CommitDetailPage({ navigate, commitId }) {
 
 /* ---------------------------- APP ROOT ---------------------------- */
 export default function App() {
-  const { user, loading, signedIn, signInWithGitHub, signOut } = useAuth();
+  const { user, loading, signedIn, signInWithGitHub, signOut, role, isMaintainer, roleLoading } = useAuth();
   const [page, setPage] = useState("landing");
   const [activeCommit, setActiveCommit] = useState(null);
   const [elapsed, setElapsed] = useState(0);
@@ -486,7 +516,7 @@ export default function App() {
   }
 
   // Loading state
-  if (loading) {
+  if (loading || roleLoading) {
     return (
       <div className="min-h-screen w-full flex items-center justify-center" style={{ backgroundColor: "#0B0E14" }}>
         <Loader2 className="h-8 w-8 animate-spin" style={{ color: "#F5A623" }} />
@@ -496,7 +526,7 @@ export default function App() {
 
   return (
     <div className="min-h-screen w-full" style={{ backgroundColor: "#0B0E14" }}>
-      <TopNav page={page} navigate={navigate} connected={signedIn} user={user} signOut={signOut} />
+      <TopNav page={page} navigate={navigate} connected={signedIn} user={user} signOut={signOut} role={role} isMaintainer={isMaintainer} />
       {page === "landing" && (
         <LandingPage navigate={navigate} connect={signInWithGitHub} />
       )}
