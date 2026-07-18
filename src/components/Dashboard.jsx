@@ -10,10 +10,25 @@ import FindingsPanel from './FindingsPanel'
 const REFRESH_INTERVAL_MS = 30_000
 
 const TOOLS = [
-  { key: 'semgrep', match: 'semgrep', title: 'Semgrep', subtitle: 'SAST — code patterns', Icon: SearchCode },
-  { key: 'gitleaks', match: 'gitleaks', title: 'Gitleaks', subtitle: 'Secrets detection', Icon: KeyRound },
-  { key: 'trivy', match: 'trivy', title: 'Trivy', subtitle: 'Dependency vulnerabilities', Icon: Package },
+  { key: 'semgrep', match: 'semgrep', title: 'Semgrep', subtitle: 'SAST — code patterns', Icon: SearchCode, reportKey: 'semgrep_findings' },
+  { key: 'gitleaks', match: 'gitleaks', title: 'Gitleaks', subtitle: 'Secrets detection', Icon: KeyRound, reportKey: 'gitleaks_leaks' },
+  { key: 'trivy', match: 'trivy', title: 'Trivy', subtitle: 'Dependency vulnerabilities', Icon: Package, reportKey: 'trivy_vulnerabilities' },
 ]
+
+// One readable line per tool — the dev should never need the raw CI logs.
+function toolSummary(entries) {
+  if (!entries) return null
+  const blocking = entries.filter((e) => e.blocking ?? true).length
+  const advisory = entries.length - blocking
+  if (entries.length === 0) return { text: 'Aucun finding ✓', tone: 'text-status-good' }
+  if (blocking > 0) {
+    return {
+      text: `${blocking} bloquant${blocking > 1 ? 's' : ''}${advisory ? ` · ${advisory} avis` : ''}`,
+      tone: 'text-status-critical',
+    }
+  }
+  return { text: `${advisory} avis non bloquant${advisory > 1 ? 's' : ''}`, tone: 'text-status-warning' }
+}
 
 // Grade tone follows the status palette; the letter itself carries the value.
 const GRADE_STYLES = {
@@ -185,8 +200,9 @@ export default function Dashboard() {
 
       {/* Tool status cards */}
       <section className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
-        {TOOLS.map(({ key, match, title, subtitle, Icon }) => {
+        {TOOLS.map(({ key, match, title, subtitle, Icon, reportKey }) => {
           const job = latestJobs.find((j) => j.name.toLowerCase().includes(match))
+          const summary = report?.sha === latestRun?.head_sha ? toolSummary(report?.[reportKey]) : null
           return (
             <div key={key} className="bg-surface border border-line rounded-xl p-5">
               <div className="flex items-center justify-between mb-3">
@@ -195,14 +211,15 @@ export default function Dashboard() {
               </div>
               <p className="font-semibold">{title}</p>
               <p className="text-ink-muted text-xs mt-0.5">{subtitle}</p>
-              {job?.html_url && (
+              {summary && <p className={`text-sm font-medium mt-3 ${summary.tone}`}>{summary.text}</p>}
+              {latestRun?.html_url && (
                 <a
-                  href={job.html_url}
+                  href={latestRun.html_url}
                   target="_blank"
                   rel="noreferrer"
-                  className="text-accent text-xs mt-3 inline-block hover:underline"
+                  className="text-accent text-xs mt-2 inline-block hover:underline"
                 >
-                  View job log →
+                  Rapport lisible du run →
                 </a>
               )}
             </div>
