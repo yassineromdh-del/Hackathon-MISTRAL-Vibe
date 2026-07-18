@@ -11,6 +11,7 @@ import urllib.request
 API = "https://api.github.com"
 REPO = os.environ["GITHUB_REPOSITORY"]
 SHA = os.environ.get("GITHUB_SHA", "")[:7]
+BRANCH = os.environ.get("GITHUB_REF_NAME", "?")
 RUN_URL = (
     f"https://github.com/{REPO}/actions/runs/{os.environ.get('GITHUB_RUN_ID', '')}"
 )
@@ -75,7 +76,7 @@ def open_issue(report_path):
     jobs = report.get("jobs", {})
 
     lines = [
-        f"La security gate a **bloqué** le commit `{SHA}` ([run]({RUN_URL})).",
+        f"La security gate a **bloqué** le commit `{SHA}` sur `{BRANCH}` ([run]({RUN_URL})).",
         "",
         f"Jobs : semgrep `{jobs.get('semgrep', '?')}` · gitleaks `{jobs.get('gitleaks', '?')}` · trivy `{jobs.get('trivy', '?')}`",
         "",
@@ -115,7 +116,7 @@ def open_issue(report_path):
 
     ensure_label()
     issue = gh(f"/repos/{REPO}/issues", "POST", {
-        "title": f"\U0001F534 Security gate blocked — {SHA}",
+        "title": f"\U0001F534 Security gate blocked — {BRANCH} @ {SHA}",
         "body": "\n".join(lines),
         "labels": [LABEL],
     })
@@ -125,6 +126,9 @@ def open_issue(report_path):
 
 def close_issues():
     issues = gh(f"/repos/{REPO}/issues?labels={LABEL}&state=open&per_page=50") or []
+    # Only close issues opened by failures on THIS branch — a green main
+    # run must not close issues belonging to a still-broken develop.
+    issues = [i for i in issues if f"— {BRANCH} @" in i["title"]]
     for issue in issues:
         gh(f"/repos/{REPO}/issues/{issue['number']}/comments", "POST", {
             "body": f"✅ Gate verte sur `{SHA}` ([run]({RUN_URL})) — findings corrigés, fermeture automatique.",
