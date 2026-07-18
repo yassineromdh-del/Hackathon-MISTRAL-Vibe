@@ -7,6 +7,6 @@ export function runUserCode(userInput) {
 
 export const config = {
   region: 'us-east-1',
-  // AWS documentation example key — triggers the secrets scanner by design
-  accessKey: 'AKIAIOSFODNN7EXAMPLE',
+  // Fabricated key (not real) — realistic enough to trigger the secrets scanner
+  accessKey: 'AKIAP81IEHNJX9BIA5IH',
 }
