@@ -1,0 +1,50 @@
+title = "Gitleaks Hackathon Config"
+
+[allowlist]
+  description = "Global allowlist"
+  paths = [
+    '''node_modules/''',
+    '''dist/''',
+    '''\.git/''',
+    '''\.github/workflows/'''
+  ]
+
+[[rules]]
+  description = "GitHub Token"
+  regex = '''(?i)(github|ghp|gho|ghu|ghs|ghr)_[a-zA-Z0-9_]{36,}'''
+  tags = ["github", "token"]
+
+[[rules]]
+  description = "Generic API Key"
+  regex = '''(?i)(api[_-]?key|apikey|api[_-]?secret)['\"][=: ]+['\"]?[a-zA-Z0-9_\-]{32,}'''
+  tags = ["api", "key"]
+
+[[rules]]
+  description = "AWS Access Key"
+  regex = '''(?i)AKIA[0-9A-Z]{16}'''
+  tags = ["aws", "key"]
+
+[[rules]]
+  description = "Stripe Key"
+  regex = '''(?i)(stripe|sk|pk)_[a-zA-Z0-9_]{24,}'''
+  tags = ["stripe", "key"]
+
+[[rules]]
+  description = "Supabase Key"
+  regex = '''(?i)(supabase|sb)_[a-zA-Z0-9_\-]{30,}'''
+  tags = ["supabase", "key"]
+
+[[rules]]
+  description = "Generic Secret"
+  regex = '''(?i)(secret|password|passwd|pwd)['\"][=: ]+['\"]?[a-zA-Z0-9_\-!@#$%^&*]{8,}'''
+  tags = ["secret", "password"]
+
+[[rules]]
+  description = "Bearer Token"
+  regex = '''(?i)bearer[ :]+[a-zA-Z0-9_\-\.]{20,}'''
+  tags = ["token", "bearer"]
+
+[[rules]]
+  description = "Private Key"
+  regex = '''-----BEGIN (RSA |EC |DSA |OPENSSH )?PRIVATE KEY-----'''
+  tags = ["key", "private"]

@@ -9,7 +9,9 @@ import {
   ArrowLeft,
   Lock,
   Github,
+  Loader2,
 } from "lucide-react";
+import { useAuth } from "./context/AuthContext.jsx";
 
 /* ------------------------------------------------------------------ */
 /* NOTE FOR YACINE:                                                    */
@@ -104,7 +106,7 @@ function GateDot({ state }) {
   );
 }
 
-function TopNav({ page, navigate, connected }) {
+function TopNav({ page, navigate, connected, user, signOut }) {
   return (
     <div
       className="w-full flex items-center justify-between px-6 py-4 sticky top-0 z-10"
@@ -123,21 +125,30 @@ function TopNav({ page, navigate, connected }) {
         </span>
       </button>
       <div className="flex items-center gap-4">
-        {connected && page !== "landing" && (
+        {connected && page !== "landing" && user && (
           <span
             className="font-mono text-[10px] tracking-wider hidden sm:block"
             style={{ color: "#565C69" }}
           >
-            yacine / cyberclear-platform
+            {user.email || user.user_metadata?.user_name || 'user'} / cyberclear-platform
           </span>
         )}
         {connected ? (
-          <span
-            className="flex items-center gap-1.5 font-mono text-[11px]"
-            style={{ color: "#F5A623" }}
-          >
-            <GateDot state="pass" /> CONNECTED
-          </span>
+          <>
+            <span
+              className="flex items-center gap-1.5 font-mono text-[11px]"
+              style={{ color: "#F5A623" }}
+            >
+              <GateDot state="pass" /> CONNECTED
+            </span>
+            <button
+              onClick={signOut}
+              className="flex items-center gap-1.5 font-mono text-[11px] hover:opacity-70"
+              style={{ color: "#565C69" }}
+            >
+              <Lock size={11} /> SIGN OUT
+            </button>
+          </>
         ) : (
           <span
             className="flex items-center gap-1.5 font-mono text-[11px]"
@@ -181,9 +192,10 @@ function LandingPage({ navigate, connect }) {
         change before it merges.
       </p>
       <button
-        onClick={() => {
-          connect();
-          navigate("dashboard");
+        onClick={async () => {
+          await connect();
+          // After successful auth, redirect will happen via Supabase
+          // We'll check auth state and navigate accordingly
         }}
         className="mt-9 flex items-center gap-2 px-5 py-3 rounded-md transition-opacity hover:opacity-90"
         style={{ backgroundColor: "#F5A623" }}
@@ -193,7 +205,7 @@ function LandingPage({ navigate, connect }) {
           className="text-[13px] font-medium"
           style={{ color: "#0B0E14", fontFamily: mono }}
         >
-          Connect repo &amp; enter dashboard
+          Sign in with GitHub
         </span>
         <ArrowRight size={14} style={{ color: "#0B0E14" }} />
       </button>
@@ -451,8 +463,8 @@ function CommitDetailPage({ navigate, commitId }) {
 
 /* ---------------------------- APP ROOT ---------------------------- */
 export default function App() {
+  const { user, loading, signedIn, signInWithGitHub, signOut } = useAuth();
   const [page, setPage] = useState("landing");
-  const [connected, setConnected] = useState(false);
   const [activeCommit, setActiveCommit] = useState(null);
   const [elapsed, setElapsed] = useState(0);
 
@@ -461,28 +473,37 @@ export default function App() {
     return () => clearInterval(t);
   }, []);
 
-  // guard: mimics a Next.js middleware redirect for protected routes
+  // guard: redirect to landing if not authenticated
   useEffect(() => {
-    if (!connected && page !== "landing") {
+    if (!signedIn && page !== "landing") {
       setPage("landing");
     }
-  }, [connected, page]);
+  }, [signedIn, page]);
 
   function navigate(target, id) {
     if (target === "detail") setActiveCommit(id);
     setPage(target);
   }
 
+  // Loading state
+  if (loading) {
+    return (
+      <div className="min-h-screen w-full flex items-center justify-center" style={{ backgroundColor: "#0B0E14" }}>
+        <Loader2 className="h-8 w-8 animate-spin" style={{ color: "#F5A623" }} />
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen w-full" style={{ backgroundColor: "#0B0E14" }}>
-      <TopNav page={page} navigate={navigate} connected={connected} />
+      <TopNav page={page} navigate={navigate} connected={signedIn} user={user} signOut={signOut} />
       {page === "landing" && (
-        <LandingPage navigate={navigate} connect={() => setConnected(true)} />
+        <LandingPage navigate={navigate} connect={signInWithGitHub} />
       )}
-      {page === "dashboard" && connected && (
-        <DashboardPage navigate={navigate} elapsed={elapsed} />
+      {page === "dashboard" && signedIn && (
+        <DashboardPage navigate={navigate} elapsed={elapsed} user={user} />
       )}
-      {page === "detail" && connected && (
+      {page === "detail" && signedIn && (
         <CommitDetailPage navigate={navigate} commitId={activeCommit} />
       )}
     </div>
