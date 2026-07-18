@@ -38,12 +38,13 @@ export async function fetchRunJobs(runId) {
   return data.jobs ?? []
 }
 
-// Published by the gate job on the `gate-reports` branch; raw.githubusercontent
-// sends CORS headers, unlike the Actions artifact download endpoint.
+// Published by the gate job on the `gate-reports` branch. Read through the
+// contents API rather than raw.githubusercontent: same CORS support, but no
+// CDN cache (raw lags up to ~5 min behind the branch).
 export async function fetchGateReport() {
   const res = await fetch(
-    `https://raw.githubusercontent.com/${REPO_OWNER}/${REPO_NAME}/gate-reports/latest.json?t=${Date.now()}`,
-    { cache: 'no-store' }
+    `${GITHUB_API_BASE}/repos/${REPO_OWNER}/${REPO_NAME}/contents/latest.json?ref=gate-reports`,
+    { headers: { ...authHeaders(), Accept: 'application/vnd.github.raw+json' }, cache: 'no-store' }
   )
   if (!res.ok) return null
   return res.json()
