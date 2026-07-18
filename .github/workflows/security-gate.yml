@@ -1,0 +1,94 @@
+name: Security Gate
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  semgrep:
+    name: Semgrep SAST
+    runs-on: ubuntu-latest
+    container:
+      image: semgrep/semgrep:latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Run Semgrep (fail on ERROR severity)
+        run: |
+          semgrep scan --config auto --config .semgrep.yml \
+            --json --output semgrep-results.json \
+            --severity ERROR --error .
+
+      - name: Upload Semgrep results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: semgrep-results
+          path: semgrep-results.json
+          retention-days: 7
+
+  gitleaks:
+    name: Gitleaks Secrets Detection
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Run Gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_CONFIG: .gitleaks.toml
+
+  trivy:
+    name: Trivy Dependency Scan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Run Trivy (fail on HIGH/CRITICAL)
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          exit-code: 1
+          ignore-unfixed: false
+          severity: HIGH,CRITICAL
+          format: json
+          output: trivy-results.json
+
+      - name: Upload Trivy results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: trivy-results
+          path: trivy-results.json
+          retention-days: 7
+
+  security-gate:
+    name: Security Gate Decision
+    needs: [semgrep, gitleaks, trivy]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Evaluate gate
+        run: |
+          echo "Semgrep:  ${{ needs.semgrep.result }}"
+          echo "Gitleaks: ${{ needs.gitleaks.result }}"
+          echo "Trivy:    ${{ needs.trivy.result }}"
+          if [ "${{ needs.semgrep.result }}" != "success" ] || \
+             [ "${{ needs.gitleaks.result }}" != "success" ] || \
+             [ "${{ needs.trivy.result }}" != "success" ]; then
+            echo "::error::Security gate BLOCKED — at least one scan failed"
+            exit 1
+          fi
+          echo "All security gates passed — safe to merge"

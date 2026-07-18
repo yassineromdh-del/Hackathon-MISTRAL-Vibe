@@ -1,39 +1,11 @@
-@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;600;700&display=swap');
-
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 :root {
-  --bg-dark: #0B0E14;
-  --bg-darker: #0F131B;
-  --border-color: #1A1E27;
-  --text-primary: #E8E6E1;
-  --text-secondary: #8A8F99;
-  --text-muted: #565C69;
-  --text-dim: #3E434F;
-  --accent-orange: #F5A623;
-  --accent-red: #E5484D;
-  --accent-blue: #5B8DEF;
-}
-
-* {
-  margin: 0;
-  padding: 0;
-  box-sizing: border-box;
-}
-
-html, body, #root {
-  height: 100%;
-  font-family: 'Space Grotesk', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  color-scheme: dark;
 }
 
 body {
-  background-color: var(--bg-dark);
-}
-
-@layer utilities {
-  .text-mono {
-    font-family: 'JetBrains Mono', monospace;
-  }
+  @apply bg-page text-ink antialiased;
 }

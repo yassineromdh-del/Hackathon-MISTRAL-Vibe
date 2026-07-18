@@ -1,0 +1,69 @@
+# Custom Semgrep rules for Security-Native Vibe Coding.
+# Focused on issues that commonly appear in AI-generated frontend code;
+# runs alongside the registry ruleset (--config auto).
+
+rules:
+  - id: hardcoded-secret-assignment
+    pattern-regex: '(?i)(password|secret|api[_-]?key|access[_-]?token|private[_-]?key)\s*[:=]\s*["''][A-Za-z0-9+/_\-]{16,}["'']'
+    message: "Hardcoded secret detected — move it to an environment variable"
+    languages: [js, ts, python, yaml, json]
+    severity: ERROR
+    metadata:
+      owasp: "A07:2021 - Identification and Authentication Failures"
+      cwe: "CWE-798: Use of Hard-coded Credentials"
+
+  - id: secret-in-url
+    pattern-regex: 'https?://[^\s"'']*(api[_-]?key|token|secret|password)=[^\s"''&]+'
+    message: "Credential passed in a URL — it will end up in logs and browser history"
+    languages: [js, ts, python]
+    severity: ERROR
+    metadata:
+      cwe: "CWE-598: Use of GET Request Method With Sensitive Query Strings"
+
+  - id: eval-usage
+    patterns:
+      - pattern-either:
+          - pattern: eval(...)
+          - pattern: new Function(...)
+    message: "eval()/new Function() executes arbitrary code — use a safe alternative"
+    languages: [js, ts]
+    severity: ERROR
+    metadata:
+      owasp: "A03:2021 - Injection"
+      cwe: "CWE-95: Eval Injection"
+
+  - id: react-dangerously-set-inner-html
+    pattern: dangerouslySetInnerHTML={...}
+    message: "dangerouslySetInnerHTML can introduce XSS — sanitize the HTML or render as text"
+    languages: [js, ts]
+    severity: ERROR
+    metadata:
+      owasp: "A03:2021 - Injection"
+      cwe: "CWE-79: Cross-site Scripting"
+
+  - id: document-write
+    pattern: document.write(...)
+    message: "document.write with dynamic content is an XSS vector"
+    languages: [js, ts]
+    severity: WARNING
+    metadata:
+      cwe: "CWE-79: Cross-site Scripting"
+
+  - id: supabase-service-role-in-frontend
+    pattern-regex: '(?i)service[_-]?role'
+    message: "Possible Supabase service-role key reference in client code — only the anon key belongs in the frontend"
+    languages: [js, ts]
+    severity: ERROR
+    paths:
+      include:
+        - src/
+    metadata:
+      category: "Supabase"
+
+  - id: hardcoded-ai-endpoint
+    pattern-regex: 'https://api\.(anthropic|openai|mistral)\.[a-z]+'
+    message: "Hardcoded AI API endpoint — calls with API keys must go through a backend, never the browser"
+    languages: [js, ts]
+    severity: WARNING
+    metadata:
+      category: "AI Security"
