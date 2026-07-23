@@ -1,11 +1,15 @@
-import { useCallback, useEffect, useState } from 'react'
-import { LogOut, RefreshCw, ShieldCheck, ShieldAlert, SearchCode, KeyRound, Package } from 'lucide-react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { LogOut, RefreshCw, ShieldCheck, ShieldAlert, SearchCode, KeyRound, Package, LayoutGrid, ArrowLeft } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
-import { fetchWorkflowRuns, fetchRunJobs, fetchGateReport } from '../lib/githubApi'
+import { fetchWorkflowRuns, fetchRunJobs, fetchGateReport, fetchGateHistory, fetchPullRequests } from '../lib/githubApi'
 import { getRepo, setRepo } from '../lib/repo'
+import { getRepos, addRepo } from '../lib/repos'
 import StatusBadge, { statusOf } from './StatusBadge'
 import RunsTable from './RunsTable'
 import FindingsPanel from './FindingsPanel'
+import ScoreTrend from './ScoreTrend'
+import PullRequestsPanel from './PullRequestsPanel'
+import PortfolioView from './PortfolioView'
 
 const REFRESH_INTERVAL_MS = 30_000
 
@@ -48,17 +52,35 @@ export default function Dashboard() {
   const [runs, setRuns] = useState([])
   const [latestJobs, setLatestJobs] = useState([])
   const [report, setReport] = useState(null)
+  const [history, setHistory] = useState([])
+  const [pulls, setPulls] = useState([])
   const [error, setError] = useState(null)
   const [refreshing, setRefreshing] = useState(true)
   const [repo, setRepoState] = useState(getRepo().full)
   const [editingRepo, setEditingRepo] = useState(false)
+  const [repos, setReposState] = useState(getRepos())
+  const [view, setView] = useState(() => (getRepos().length > 1 ? 'portfolio' : 'detail'))
+
+  // Open a project from the portfolio → make it active and drill into detail.
+  const openRepo = useCallback((full) => {
+    if (setRepo(full)) {
+      setRepoState(getRepo().full)
+      addRepo(full)
+      setReposState(getRepos())
+      setReport(null)
+      setHistory([])
+      setView('detail')
+    }
+  }, [])
 
   const load = useCallback(async () => {
     setRefreshing(true)
     setError(null)
     try {
       fetchGateReport().then(setReport).catch(() => {})
-      const workflowRuns = await fetchWorkflowRuns()
+      fetchGateHistory().then(setHistory).catch(() => {})
+      fetchPullRequests().then(setPulls).catch(() => setPulls([]))
+      const workflowRuns = await fetchWorkflowRuns(50)
       setRuns(workflowRuns)
       if (workflowRuns[0]) {
         setLatestJobs(await fetchRunJobs(workflowRuns[0].id))
@@ -80,13 +102,19 @@ export default function Dashboard() {
     load()
     const interval = setInterval(load, REFRESH_INTERVAL_MS)
     return () => clearInterval(interval)
-  }, [load])
+  }, [load, repo])
 
   const latestRun = runs[0]
   const gateStatus = statusOf(latestRun)
   const gatePassed = gateStatus === 'success'
   const passedCount = runs.filter((r) => r.conclusion === 'success').length
   const completedCount = runs.filter((r) => r.status === 'completed').length
+
+  // Join score history onto runs by head_sha (see the workflow's head_sha fix).
+  const scoreBySha = useMemo(
+    () => new Map(history.map((h) => [h.head_sha ?? h.sha, { score: h.score, grade: h.grade }])),
+    [history]
+  )
 
   const username = user?.user_metadata?.user_name ?? user?.email
   const avatar = user?.user_metadata?.avatar_url
@@ -96,7 +124,9 @@ export default function Dashboard() {
       <header className="flex items-center justify-between mb-8">
         <div>
           <h1 className="text-xl font-semibold">Zero-to-Prod</h1>
-          {editingRepo ? (
+          {view === 'portfolio' ? (
+            <p className="text-ink-muted text-xs font-mono mt-0.5">Security Gate Portfolio</p>
+          ) : editingRepo ? (
             <form
               onSubmit={(e) => {
                 e.preventDefault()
@@ -129,6 +159,16 @@ export default function Dashboard() {
           )}
         </div>
         <div className="flex items-center gap-3">
+          {view === 'detail' && (
+            <button
+              onClick={() => { setReposState(getRepos()); setView('portfolio') }}
+              title="Voir tous les projets"
+              className="flex items-center gap-1.5 text-xs border border-line rounded-lg px-2.5 py-1.5 text-ink-secondary hover:text-ink hover:border-line-strong transition-colors"
+            >
+              <LayoutGrid className="w-3.5 h-3.5" aria-hidden="true" />
+              Projets
+            </button>
+          )}
           <span className={`text-xs font-medium px-2.5 py-1 rounded-full capitalize ${ROLE_STYLES[role]}`}>
             {role}
           </span>
@@ -144,6 +184,10 @@ export default function Dashboard() {
         </div>
       </header>
 
+      {view === 'portfolio' ? (
+        <PortfolioView repos={repos} onOpen={openRepo} onReposChange={setReposState} />
+      ) : (
+      <>
       {error && (
         <div className="mb-6 bg-surface border border-status-serious/40 rounded-xl p-4 text-sm text-ink-secondary">
           {error}
@@ -198,6 +242,8 @@ export default function Dashboard() {
         </div>
       </section>
 
+      <ScoreTrend history={history} />
+
       {/* Tool status cards */}
       <section className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
         {TOOLS.map(({ key, match, title, subtitle, Icon, reportKey }) => {
@@ -227,9 +273,13 @@ export default function Dashboard() {
         })}
       </section>
 
+      <PullRequestsPanel pulls={pulls} runs={runs} />
+
       <FindingsPanel report={report} />
 
-      <RunsTable runs={runs} loading={refreshing} />
+      <RunsTable runs={runs} loading={refreshing} scoreBySha={scoreBySha} />
+      </>
+      )}
     </div>
   )
 }

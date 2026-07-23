@@ -22,7 +22,12 @@ jobs:
 
       - name: Run Semgrep (full scan, JSON report)
         run: |
-          semgrep scan --config auto --config .semgrep.yml \
+          # Stack-agnostic: registry auto-rules always run; repo-local custom
+          # rules are added only if the file exists, so the gate drops into any
+          # project unchanged.
+          CONFIGS="--config auto"
+          [ -f .semgrep.yml ] && CONFIGS="$CONFIGS --config .semgrep.yml"
+          semgrep scan $CONFIGS \
             --json --output semgrep-results.json . || true
 
       - name: Upload Semgrep results
@@ -61,7 +66,11 @@ jobs:
           # --log-opts=HEAD: only walk the current branch's history —
           # fetch-depth:0 pulls every branch, and without this a leak on a
           # demo branch would fail the gate on main too.
-          ./gitleaks git --config .gitleaks.toml \
+          # Config is optional: use repo-local .gitleaks.toml if present,
+          # otherwise gitleaks' built-in default ruleset.
+          CFG=""
+          [ -f .gitleaks.toml ] && CFG="--config .gitleaks.toml"
+          ./gitleaks git $CFG \
             --log-opts="--full-history HEAD" \
             --report-format json --report-path gitleaks-results.json \
             --redact --exit-code 1 .
@@ -123,9 +132,15 @@ jobs:
           SEMGREP_RESULT: ${{ needs.semgrep.result }}
           GITLEAKS_RESULT: ${{ needs.gitleaks.result }}
           TRIVY_RESULT: ${{ needs.trivy.result }}
+          # On pull_request, GITHUB_SHA is the ephemeral merge commit, which does
+          # not match run.head_sha from the Actions API. Record the real PR head
+          # so the dashboard can join score <-> run and build code links.
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          # Used to carry the score history forward across runs.
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           python3 - <<'EOF'
-          import json, os, glob, datetime
+          import json, os, glob, datetime, urllib.request
 
           def load(pattern):
               for p in glob.glob(pattern):
@@ -215,10 +230,15 @@ jobs:
                        [('A+', 95), ('A', 85), ('B', 70), ('C', 50), ('D', 30), ('F', -1)]
                        if score >= t)
 
+          # head_sha is the commit the dashboard keys on: PR head on pull_request
+          # events, GITHUB_SHA on push (where they coincide).
+          head_sha = os.environ.get('PR_HEAD_SHA') or os.environ.get('GITHUB_SHA')
+
           report = {
               'score': score,
               'grade': grade,
               'sha': os.environ.get('GITHUB_SHA'),
+              'head_sha': head_sha,
               'run_id': os.environ.get('GITHUB_RUN_ID'),
               'generated_at': datetime.datetime.now(datetime.timezone.utc).isoformat(),
               'jobs': {
@@ -235,6 +255,50 @@ jobs:
           with open('report/latest.json', 'w') as f:
               json.dump(report, f, indent=1)
           print(f"report: grade {grade} ({score}/100) — {len(findings)} semgrep findings, {len(vulns)} trivy vulns, {len(leaks)} leaks")
+
+          # Score history — the branch is force-pushed each run, so the trend
+          # lives inside history.json, carried forward here. Read the previous
+          # file from the gate-reports branch (contents API, not the CDN-cached
+          # raw host), append this run, dedupe by head_sha, keep the last 50.
+          blocking_count = sum(1 for f in findings if f['blocking']) \
+              + sum(1 for v in vulns if v['blocking']) \
+              + sum(1 for l in leaks if l['blocking'])
+          advisory_count = (len(findings) + len(vulns) + len(leaks)) - blocking_count
+
+          def load_history():
+              repo = os.environ.get('GITHUB_REPOSITORY')
+              token = os.environ.get('GITHUB_TOKEN')
+              url = f"https://api.github.com/repos/{repo}/contents/history.json?ref=gate-reports"
+              req = urllib.request.Request(url, headers={
+                  'Accept': 'application/vnd.github.raw+json',
+                  'Authorization': f'Bearer {token}',
+                  'User-Agent': 'security-gate',
+              })
+              try:
+                  # URL built from the trusted GITHUB_REPOSITORY env var, not user input.
+                  with urllib.request.urlopen(req, timeout=15) as r:  # nosemgrep: python.lang.security.audit.dynamic-urllib-use-detected.dynamic-urllib-use-detected
+                      data = json.loads(r.read().decode())
+                      return data if isinstance(data, list) else []
+              except Exception as e:
+                  print(f"history: starting fresh ({e})")
+                  return []
+
+          entry = {
+              'head_sha': head_sha,
+              'sha': report['sha'],
+              'score': score,
+              'grade': grade,
+              'generated_at': report['generated_at'],
+              'jobs': report['jobs'],
+              'blocking_count': blocking_count,
+              'advisory_count': advisory_count,
+          }
+          history = [h for h in load_history() if h.get('head_sha') != head_sha]
+          history.append(entry)
+          history = history[-50:]
+          with open('report/history.json', 'w') as f:
+              json.dump(history, f, indent=1)
+          print(f"history: {len(history)} run(s) recorded")
 
           # Professional run summary rendered by GitHub above the raw logs.
           summary_path = os.environ.get('GITHUB_STEP_SUMMARY')
@@ -276,7 +340,7 @@ jobs:
           git init -q -b gate-reports
           git config user.name "security-gate[bot]"
           git config user.email "actions@users.noreply.github.com"
-          git add latest.json
+          git add latest.json history.json
           git commit -q -m "gate report for ${GITHUB_SHA::7}"
           git push --force -q \
             "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${GITHUB_REPOSITORY}.git" \
@@ -286,13 +350,24 @@ jobs:
         if: needs.semgrep.result != 'success' || needs.gitleaks.result != 'success' || needs.trivy.result != 'success'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: python3 .github/scripts/security_gate_bot.py open report/latest.json
+        run: |
+          # Self-healing is optional — only runs where the bot script is shipped.
+          if [ -f .github/scripts/security_gate_bot.py ]; then
+            python3 .github/scripts/security_gate_bot.py open report/latest.json
+          else
+            echo "no self-healing bot script (.github/scripts/security_gate_bot.py) — skipping"
+          fi
 
       - name: Self-healing — close fixed issues when green
         if: needs.semgrep.result == 'success' && needs.gitleaks.result == 'success' && needs.trivy.result == 'success'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: python3 .github/scripts/security_gate_bot.py close
+        run: |
+          if [ -f .github/scripts/security_gate_bot.py ]; then
+            python3 .github/scripts/security_gate_bot.py close
+          else
+            echo "no self-healing bot script — skipping"
+          fi
 
       - name: Evaluate gate
         run: |

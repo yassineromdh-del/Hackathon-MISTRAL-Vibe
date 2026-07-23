@@ -1,4 +1,6 @@
-import { AlertTriangle, AlertOctagon, Info, ShieldQuestion, ShieldCheck, Wrench, EyeOff } from 'lucide-react'
+import { useMemo, useState } from 'react'
+import { AlertTriangle, AlertOctagon, Info, ShieldQuestion, ShieldCheck, Wrench, EyeOff, Search, ExternalLink } from 'lucide-react'
+import { getRepo } from '../lib/repo'
 
 // Severity always reads as icon + label, never color alone.
 const SEVERITIES = {
@@ -24,8 +26,15 @@ function Severity({ value }) {
 
 const rank = (sev) => SEVERITIES[sev]?.rank ?? 4
 
-// Normalize the three tools' findings into one shape the panel can render.
+// Normalize the three tools' findings into one structured shape. The code link
+// is built from the commit each tool actually scanned: report.head_sha for
+// Semgrep (the run's head, not the PR merge commit), the leak's own commit for
+// Gitleaks. Trivy findings have no source location.
 function normalize(report) {
+  const repo = getRepo().full
+  const blob = (sha, file, line) =>
+    sha && file ? `https://github.com/${repo}/blob/${sha}/${file}${line ? `#L${line}` : ''}` : null
+
   const items = []
   for (const f of report.semgrep_findings ?? []) {
     items.push({
@@ -35,7 +44,8 @@ function normalize(report) {
       title: f.rule?.split('.').pop(),
       problem: f.message,
       solution: f.remediation,
-      location: `${f.file}:${f.line}`,
+      locationText: `${f.file}:${f.line}`,
+      href: blob(report.head_sha ?? report.sha, f.file, f.line),
     })
   }
   for (const v of report.trivy_vulnerabilities ?? []) {
@@ -46,7 +56,8 @@ function normalize(report) {
       title: `${v.package} ${v.installed} — ${v.id}`,
       problem: v.title,
       solution: v.remediation,
-      location: v.fixed ? `fix available: ${v.fixed}` : 'no fix yet',
+      locationText: v.fixed ? `fix available: ${v.fixed}` : 'no fix yet',
+      href: null,
     })
   }
   for (const l of report.gitleaks_leaks ?? []) {
@@ -57,7 +68,8 @@ function normalize(report) {
       title: l.rule,
       problem: l.description,
       solution: l.remediation,
-      location: `${l.file}:${l.line} (commit ${l.commit})`,
+      locationText: `${l.file}:${l.line} (commit ${l.commit})`,
+      href: blob(l.commit, l.file, l.line),
     })
   }
   return items.sort((a, b) => rank(a.severity) - rank(b.severity))
@@ -81,30 +93,109 @@ function FindingRow({ item }) {
             <span><span className="text-ink-muted">Solution : </span>{item.solution}</span>
           </p>
         )}
-        <p className="font-mono text-xs text-ink-muted mt-1">{item.location}</p>
+        {item.href ? (
+          <a
+            href={item.href}
+            target="_blank"
+            rel="noreferrer"
+            className="font-mono text-xs text-accent mt-1 inline-flex items-center gap-1 hover:underline"
+          >
+            {item.locationText}
+            <ExternalLink className="w-3 h-3" aria-hidden="true" />
+          </a>
+        ) : (
+          <p className="font-mono text-xs text-ink-muted mt-1">{item.locationText}</p>
+        )}
       </div>
     </div>
   )
 }
 
+const TOOLS = ['Semgrep', 'Gitleaks', 'Trivy']
+const VIEWS = [
+  { key: 'all', label: 'Tous' },
+  { key: 'blocking', label: 'Bloquants' },
+  { key: 'advisory', label: 'Avis' },
+]
+
+function Chip({ active, onClick, children }) {
+  return (
+    <button
+      onClick={onClick}
+      className={`text-xs px-2.5 py-1 rounded-full border transition-colors ${
+        active
+          ? 'bg-accent/15 text-accent border-accent/40'
+          : 'border-line text-ink-secondary hover:text-ink hover:border-line-strong'
+      }`}
+    >
+      {children}
+    </button>
+  )
+}
+
 export default function FindingsPanel({ report }) {
+  const [tool, setTool] = useState('all')
+  const [view, setView] = useState('all')
+  const [query, setQuery] = useState('')
+
+  const items = useMemo(() => (report ? normalize(report) : []), [report])
+
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase()
+    return items.filter((i) => {
+      if (tool !== 'all' && i.tool !== tool) return false
+      if (view === 'blocking' && !i.blocking) return false
+      if (view === 'advisory' && i.blocking) return false
+      if (q && !`${i.title} ${i.problem} ${i.locationText}`.toLowerCase().includes(q)) return false
+      return true
+    })
+  }, [items, tool, view, query])
+
   if (!report) return null
 
-  const items = normalize(report)
-  const blocking = items.filter((i) => i.blocking)
-  const advisory = items.filter((i) => !i.blocking)
+  const blocking = filtered.filter((i) => i.blocking)
+  const advisory = filtered.filter((i) => !i.blocking)
   const waivers = report.waivers ?? []
+  const totalBlocking = items.filter((i) => i.blocking).length
+  const totalAdvisory = items.length - totalBlocking
 
   return (
     <section className="bg-surface border border-line rounded-xl overflow-hidden mb-8">
-      <div className="px-5 py-4 border-b border-line flex items-center justify-between">
+      <div className="px-5 py-4 border-b border-line flex items-center justify-between flex-wrap gap-2">
         <h2 className="font-semibold text-sm">
           Findings — <span className="font-mono font-normal text-ink-secondary">{report.sha?.slice(0, 7)}</span>
         </h2>
         <span className="text-ink-muted text-xs">
-          {blocking.length} bloquant{blocking.length === 1 ? '' : 's'} · {advisory.length} avis · {waivers.length} faux positif{waivers.length === 1 ? '' : 's'} assumé{waivers.length === 1 ? '' : 's'}
+          {totalBlocking} bloquant{totalBlocking === 1 ? '' : 's'} · {totalAdvisory} avis · {waivers.length} faux positif{waivers.length === 1 ? '' : 's'} assumé{waivers.length === 1 ? '' : 's'}
         </span>
       </div>
+
+      {/* Drilldown toolbar */}
+      {items.length > 0 && (
+        <div className="px-5 py-3 border-b border-line flex items-center gap-2 flex-wrap">
+          <div className="flex items-center gap-1.5">
+            <Chip active={tool === 'all'} onClick={() => setTool('all')}>Tous outils</Chip>
+            {TOOLS.map((t) => (
+              <Chip key={t} active={tool === t} onClick={() => setTool(t)}>{t}</Chip>
+            ))}
+          </div>
+          <span className="w-px h-4 bg-line mx-1 hidden sm:block" />
+          <div className="flex items-center gap-1.5">
+            {VIEWS.map((v) => (
+              <Chip key={v.key} active={view === v.key} onClick={() => setView(v.key)}>{v.label}</Chip>
+            ))}
+          </div>
+          <div className="relative ml-auto">
+            <Search className="w-3.5 h-3.5 text-ink-muted absolute left-2 top-1/2 -translate-y-1/2" aria-hidden="true" />
+            <input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Filtrer règle / fichier…"
+              className="bg-page border border-line rounded-lg pl-7 pr-2 py-1 text-xs text-ink w-48 focus:outline-none focus:border-accent"
+            />
+          </div>
+        </div>
+      )}
 
       {items.length === 0 && (
         <p className="px-5 py-5 text-sm text-ink-secondary flex items-center gap-2">
@@ -113,10 +204,14 @@ export default function FindingsPanel({ report }) {
         </p>
       )}
 
+      {items.length > 0 && filtered.length === 0 && (
+        <p className="px-5 py-5 text-sm text-ink-muted">Aucun finding ne correspond au filtre.</p>
+      )}
+
       {blocking.length > 0 && (
         <div className="divide-y divide-line">
           <p className="px-5 pt-4 pb-2 text-xs uppercase tracking-wide text-status-critical font-medium">
-            Bloquants — la gate refuse le merge
+            Bloquants — la gate refuse le merge ({blocking.length})
           </p>
           {blocking.map((item, i) => <FindingRow key={i} item={item} />)}
         </div>
@@ -125,7 +220,7 @@ export default function FindingsPanel({ report }) {
       {advisory.length > 0 && (
         <div className="divide-y divide-line border-t border-line">
           <p className="px-5 pt-4 pb-2 text-xs uppercase tracking-wide text-ink-muted">
-            Avis — non bloquants, à corriger quand possible
+            Avis — non bloquants, à corriger quand possible ({advisory.length})
           </p>
           {advisory.map((item, i) => <FindingRow key={i} item={item} />)}
         </div>
