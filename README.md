@@ -57,3 +57,6 @@ status check on `main` to actually block merges.
 - No manual code edits: every change comes from an AI prompt.
 - A failing gate is fixed by iterating the prompt, not by weakening the gate.
 - The prompt trail (commit messages + conversation log) is part of the deliverable.
+
+<!-- gate smoke test: 2026-07-23 — witness commit to exercise the security gate -->
+
