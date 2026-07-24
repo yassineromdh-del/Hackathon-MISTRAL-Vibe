@@ -32,8 +32,12 @@ const rank = (sev) => SEVERITIES[sev]?.rank ?? 4
 // Gitleaks. Trivy findings have no source location.
 function normalize(report) {
   const repo = getRepo().full
+  // Code links are provider-aware: GitHub uses /blob/, GitLab uses /-/blob/.
+  const provider = report.provider || 'github'
+  const host = provider === 'gitlab' ? 'https://gitlab.com' : 'https://github.com'
+  const blobSeg = provider === 'gitlab' ? '/-/blob/' : '/blob/'
   const blob = (sha, file, line) =>
-    sha && file ? `https://github.com/${repo}/blob/${sha}/${file}${line ? `#L${line}` : ''}` : null
+    sha && file ? `${host}/${repo}${blobSeg}${sha}/${file}${line ? `#L${line}` : ''}` : null
 
   const items = []
   for (const f of report.semgrep_findings ?? []) {

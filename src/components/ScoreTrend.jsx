@@ -26,6 +26,42 @@ const BANDS = [
 
 const gradeColor = (g) => (BANDS.find((b) => b.grade === g) || { color: C.critical }).color
 
+const TOOL_LABELS = { semgrep: 'Semgrep', gitleaks: 'Gitleaks', trivy: 'Trivy' }
+
+// Explain a run relative to the one before it: signed score delta + a plain
+// cause. Reads jobs / blocking_count / advisory_count that the gate workflow
+// records per run; older history entries may lack them, so every read is
+// guarded and we degrade gracefully to "recomposition des findings".
+function explainVariation(curr, prev) {
+  if (!curr || !prev) return null
+  const delta = (curr.score ?? 0) - (prev.score ?? 0)
+  const jc = curr.jobs ?? {}
+  const jp = prev.jobs ?? {}
+  const flips = []
+  for (const k of ['semgrep', 'gitleaks', 'trivy']) {
+    if (jp[k] && jc[k] && jp[k] !== jc[k]) {
+      flips.push(`${TOOL_LABELS[k]} ${jc[k] === 'success' ? 'repassé au vert' : 'en échec'}`)
+    }
+  }
+  const db = (curr.blocking_count ?? 0) - (prev.blocking_count ?? 0)
+  const da = (curr.advisory_count ?? 0) - (prev.advisory_count ?? 0)
+  const signed = (n, sing, plur) => `${n > 0 ? '+' : ''}${n} ${Math.abs(n) > 1 ? plur : sing}`
+
+  let cause
+  if (flips.length) cause = flips.join(' · ')
+  else if (db !== 0) cause = signed(db, 'finding bloquant', 'findings bloquants')
+  else if (da !== 0) cause = signed(da, 'avis', 'avis')
+  else if (delta !== 0) cause = 'recomposition de la sévérité des findings'
+  else cause = 'aucun changement'
+
+  return { delta, cause, dir: delta > 0 ? 'up' : delta < 0 ? 'down' : 'flat' }
+}
+
+const deltaArrow = (d) => (d > 0 ? '↑' : d < 0 ? '↓' : '→')
+const deltaClass = (d) => (d > 0 ? 'text-status-good' : d < 0 ? 'text-status-critical' : 'text-ink-muted')
+const deltaColor = (d) => (d > 0 ? C.good : d < 0 ? C.critical : C.inkMuted)
+const fmtDelta = (d) => `${d > 0 ? '+' : ''}${d}`
+
 const W = 760
 const H = 220
 const PAD = { t: 16, r: 16, b: 26, l: 34 }
@@ -61,22 +97,40 @@ export default function ScoreTrend({ history }) {
     : ''
 
   const latest = n ? data[n - 1] : null
+  const latestVar = n > 1 ? explainVariation(data[n - 1], data[n - 2]) : null
   const hovered = hover != null && data[hover] ? data[hover] : null
+  const hoveredVar = hover > 0 ? explainVariation(data[hover], data[hover - 1]) : null
+
+  // One entry per run that actually moved the score (newest first), so the
+  // manager reads *why* the curve bends, not just that it did.
+  const changelog = []
+  for (let i = n - 1; i >= 1; i--) {
+    const v = explainVariation(data[i], data[i - 1])
+    if (v && v.cause !== 'aucun changement') changelog.push({ ...v, point: data[i] })
+  }
 
   return (
     <section className="bg-surface border border-line rounded-xl p-5 mb-6">
-      <div className="flex items-center justify-between mb-3">
+      <div className="flex items-start justify-between mb-3 gap-3">
         <div className="flex items-center gap-2">
           <TrendingUp className="w-4 h-4 text-ink-secondary" aria-hidden="true" />
           <h2 className="font-semibold text-sm">Tendance du Vibe Security Score</h2>
         </div>
         {latest && (
-          <span className="text-xs text-ink-muted">
-            {n} run{n > 1 ? 's' : ''} · dernier{' '}
-            <span className="font-medium" style={{ color: gradeColor(latest.grade) }}>
-              {latest.grade} ({latest.score}/100)
+          <div className="text-right">
+            <span className="text-xs text-ink-muted">
+              {n} run{n > 1 ? 's' : ''} · dernier{' '}
+              <span className="font-medium" style={{ color: gradeColor(latest.grade) }}>
+                {latest.grade} ({latest.score}/100)
+              </span>
             </span>
-          </span>
+            {latestVar && (
+              <p className={`text-xs font-medium ${deltaClass(latestVar.delta)}`}>
+                {deltaArrow(latestVar.delta)} {fmtDelta(latestVar.delta)} pts{' '}
+                <span className="text-ink-muted font-normal">— {latestVar.cause}</span>
+              </p>
+            )}
+          </div>
         )}
       </div>
 
@@ -153,8 +207,8 @@ export default function ScoreTrend({ history }) {
             <g pointerEvents="none">
               <line x1={x(hover)} x2={x(hover)} y1={PAD.t} y2={y(0)} stroke={C.inkMuted} strokeWidth="1" strokeDasharray="2 3" />
               {(() => {
-                const tw = 150
-                const th = 46
+                const tw = 168
+                const th = hoveredVar ? 62 : 46
                 const tx = Math.min(W - PAD.r - tw, Math.max(PAD.l, x(hover) - tw / 2))
                 const ty = Math.max(PAD.t, y(hovered.score) - th - 10)
                 return (
@@ -167,12 +221,41 @@ export default function ScoreTrend({ history }) {
                     <text x="10" y="33" fontSize="9" fill={C.inkMuted} fontFamily="ui-monospace, monospace">
                       {(hovered.head_sha ?? hovered.sha ?? '').slice(0, 7)} · {fmtDate(hovered.generated_at)}
                     </text>
+                    {hoveredVar && (
+                      <text x="10" y="49" fontSize="9" fill={C.inkSecondary}>
+                        <tspan fill={deltaColor(hoveredVar.delta)} fontWeight="600">
+                          {deltaArrow(hoveredVar.delta)} {fmtDelta(hoveredVar.delta)} pts
+                        </tspan>
+                        <tspan> · {hoveredVar.cause.length > 22 ? hoveredVar.cause.slice(0, 21) + '…' : hoveredVar.cause}</tspan>
+                      </text>
+                    )}
                   </g>
                 )
               })()}
             </g>
           )}
         </svg>
+      )}
+
+      {/* What actually moved the score — the "why" behind the curve. */}
+      {changelog.length > 0 && (
+        <div className="mt-4 border-t border-line pt-3">
+          <p className="text-xs uppercase tracking-wide text-ink-muted mb-2">Ce qui a fait bouger le score</p>
+          <ul className="space-y-1.5">
+            {changelog.slice(0, 6).map((v) => (
+              <li key={v.point.head_sha ?? v.point.sha} className="flex items-center gap-3 text-xs">
+                <span className={`font-medium tabular-nums w-12 shrink-0 text-right ${deltaClass(v.delta)}`}>
+                  {deltaArrow(v.delta)} {fmtDelta(v.delta)}
+                </span>
+                <span className="text-ink-secondary flex-1 min-w-0 truncate">{v.cause}</span>
+                <span className="font-mono text-ink-muted shrink-0">
+                  {(v.point.head_sha ?? v.point.sha ?? '').slice(0, 7)}
+                </span>
+                <span className="text-ink-muted shrink-0 w-14 text-right">{fmtDate(v.point.generated_at)}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
       )}
     </section>
   )
