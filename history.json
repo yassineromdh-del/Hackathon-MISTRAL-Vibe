@@ -1,0 +1,30 @@
+[
+ {
+  "head_sha": "7152d6d85d2c28f7e85c0e99f70e6713b3ffaff2",
+  "sha": "7152d6d85d2c28f7e85c0e99f70e6713b3ffaff2",
+  "score": 91,
+  "grade": "A",
+  "generated_at": "2026-07-23T14:14:53.919874+00:00",
+  "jobs": {
+   "semgrep": "success",
+   "gitleaks": "success",
+   "trivy": "success"
+  },
+  "blocking_count": 0,
+  "advisory_count": 1
+ },
+ {
+  "head_sha": "28e6f6442acb7c8041195cb6a897721faf1481c4",
+  "sha": "c3ff50f585c577b16100f06d16029bd364630939",
+  "score": 0,
+  "grade": "F",
+  "generated_at": "2026-07-24T14:39:06.690898+00:00",
+  "jobs": {
+   "semgrep": "failure",
+   "gitleaks": "success",
+   "trivy": "success"
+  },
+  "blocking_count": 3,
+  "advisory_count": 3
+ }
+]

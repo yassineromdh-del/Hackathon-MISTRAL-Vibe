@@ -1,0 +1,87 @@
+{
+ "score": 0,
+ "grade": "F",
+ "sha": "c3ff50f585c577b16100f06d16029bd364630939",
+ "head_sha": "28e6f6442acb7c8041195cb6a897721faf1481c4",
+ "run_id": "30101878103",
+ "generated_at": "2026-07-24T14:39:06.690898+00:00",
+ "jobs": {
+  "semgrep": "failure",
+  "gitleaks": "success",
+  "trivy": "success"
+ },
+ "semgrep_findings": [
+  {
+   "severity": "WARNING",
+   "blocking": false,
+   "rule": "python.lang.security.audit.dynamic-urllib-use-detected.dynamic-urllib-use-detected",
+   "file": ".github/scripts/security_gate_bot.py",
+   "line": 33,
+   "message": "Detected a dynamic value being used with urllib. urllib supports 'file://' schemes, so a dynamic value controlled by a malicious actor may allow them to read arbitrary files. Audit uses of urllib calls to ensure user data cannot control the URLs, or consider using the 'requests' library instead.",
+   "remediation": "Review and apply the rule guidance: https://semgrep.dev/r/python.lang.security.audit.dynamic-urllib-use-detected.dynamic-urllib-use-detected"
+  },
+  {
+   "severity": "ERROR",
+   "blocking": true,
+   "rule": "dockerfile.security.missing-user-entrypoint.missing-user-entrypoint",
+   "file": "app/Dockerfile",
+   "line": 13,
+   "message": "By not specifying a USER, a program in the container may run as 'root'. This is a security hazard. If an attacker can control a process running as root, they may have control over the container. Ensure that the last USER in a Dockerfile is a USER other than 'root'.",
+   "remediation": "Review and apply the rule guidance: https://semgrep.dev/r/dockerfile.security.missing-user-entrypoint.missing-user-entrypoint"
+  },
+  {
+   "severity": "ERROR",
+   "blocking": true,
+   "rule": "dockerfile.security.missing-user.missing-user",
+   "file": "app/Dockerfile",
+   "line": 16,
+   "message": "By not specifying a USER, a program in the container may run as 'root'. This is a security hazard. If an attacker can control a process running as root, they may have control over the container. Ensure that the last USER in a Dockerfile is a USER other than 'root'.",
+   "remediation": "Review and apply the rule guidance: https://semgrep.dev/r/dockerfile.security.missing-user.missing-user"
+  },
+  {
+   "severity": "WARNING",
+   "blocking": false,
+   "rule": "python.flask.security.audit.app-run-param-config.avoid_app_run_with_bad_host",
+   "file": "app/server.py",
+   "line": 181,
+   "message": "Running flask app with host 0.0.0.0 could expose the server publicly.",
+   "remediation": "Review and apply the rule guidance: https://semgrep.dev/r/python.flask.security.audit.app-run-param-config.avoid_app_run_with_bad_host"
+  },
+  {
+   "severity": "ERROR",
+   "blocking": true,
+   "rule": "dockerfile.security.missing-user-entrypoint.missing-user-entrypoint",
+   "file": "gate/Dockerfile",
+   "line": 33,
+   "message": "By not specifying a USER, a program in the container may run as 'root'. This is a security hazard. If an attacker can control a process running as root, they may have control over the container. Ensure that the last USER in a Dockerfile is a USER other than 'root'.",
+   "remediation": "Review and apply the rule guidance: https://semgrep.dev/r/dockerfile.security.missing-user-entrypoint.missing-user-entrypoint"
+  },
+  {
+   "severity": "WARNING",
+   "blocking": false,
+   "rule": "python.lang.security.audit.dynamic-urllib-use-detected.dynamic-urllib-use-detected",
+   "file": "gate/gate.py",
+   "line": 153,
+   "message": "Detected a dynamic value being used with urllib. urllib supports 'file://' schemes, so a dynamic value controlled by a malicious actor may allow them to read arbitrary files. Audit uses of urllib calls to ensure user data cannot control the URLs, or consider using the 'requests' library instead.",
+   "remediation": "Review and apply the rule guidance: https://semgrep.dev/r/python.lang.security.audit.dynamic-urllib-use-detected.dynamic-urllib-use-detected"
+  }
+ ],
+ "trivy_vulnerabilities": [],
+ "gitleaks_leaks": [],
+ "waivers": [
+  {
+   "tool": "gitleaks",
+   "id": "jwt-placeholder-env-example",
+   "what": "JWT header placeholder (eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...) in the old .env.example, commit 002bb0f",
+   "why": "Documentation placeholder \u2014 the standard JWT header prefix, not a real credential. Frozen in git history.",
+   "where": ".gitleaks.toml \u2192 allowlist regex"
+  },
+  {
+   "tool": "gitleaks",
+   "id": "vendored-paths",
+   "what": "node_modules/, dist/ and package-lock.json excluded from secret scanning",
+   "why": "Generated/vendored files \u2014 integrity hashes trigger entropy-based rules with no real secrets.",
+   "where": ".gitleaks.toml \u2192 allowlist paths"
+  }
+ ]
+}
