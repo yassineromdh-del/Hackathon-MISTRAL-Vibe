@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { LogOut, RefreshCw, ShieldCheck, ShieldAlert, SearchCode, KeyRound, Package, LayoutGrid, ArrowLeft } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
-import { fetchWorkflowRuns, fetchRunJobs, fetchGateReport, fetchGateHistory, fetchPullRequests } from '../lib/githubApi'
+import { fetchWorkflowRuns, fetchRunJobs, fetchPullRequests } from '../lib/githubApi'
+import { getLatestReport, getHistory } from '../lib/reportsStore'
 import { getRepo, setRepo } from '../lib/repo'
 import { getRepos, addRepo } from '../lib/repos'
 import StatusBadge, { statusOf } from './StatusBadge'
@@ -77,8 +78,8 @@ export default function Dashboard() {
     setRefreshing(true)
     setError(null)
     try {
-      fetchGateReport().then(setReport).catch(() => {})
-      fetchGateHistory().then(setHistory).catch(() => {})
+      getLatestReport().then(setReport).catch(() => {})
+      getHistory().then(setHistory).catch(() => {})
       fetchPullRequests().then(setPulls).catch(() => setPulls([]))
       const workflowRuns = await fetchWorkflowRuns(50)
       setRuns(workflowRuns)

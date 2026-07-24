@@ -60,3 +60,34 @@ status check on `main` to actually block merges.
 
 <!-- gate smoke test: 2026-07-23 — witness commit to exercise the security gate -->
 
+## Déploiement configless — une App installée une fois (sans fichier dans les repos)
+
+Le gate n'est **ni copié ni configuré** dans les repos. Une **GitHub App** (+ webhook
+GitLab) installée **une seule fois** sur le compte scanne **tous les repos, présents
+et futurs**, sur push/PR — **aucun fichier, aucun ruleset, aucun tier Enterprise**. Le
+verdict revient en **Check Run** (GitHub) / **commit status** (GitLab), qui bloque le
+merge sur n'importe quel plan ; le rapport est upserté dans **Supabase** pour le dashboard.
+
+```
+Install App (1 clic) ─▶ webhook push/PR (tous les repos) ─▶ backend: gate.py scanne
+        └─▶ Check Run / commit status (bloque le merge)  +  upsert Supabase ─▶ dashboard
+```
+
+| Composant | Fichier |
+|---|---|
+| Moteur de scan (importable + CLI) | `gate/gate.py`, `gate/Dockerfile` |
+| Backend de l'App (webhook + Check Run) | `app/server.py`, `app/Dockerfile` |
+| Enregistrement + déploiement | `app/README.md` |
+| Store central | `supabase/migrations/0001_gate_reports.sql` |
+
+- **Changer de compte** → installer l'App sur le nouveau compte (1 clic).
+- **Ajouter un repo** → couvert automatiquement (grant « All repositories »).
+- **Faire évoluer le gate** → redéployer ce seul service ; **rien ne touche les repos**.
+
+La **seule** chose à héberger : ce backend (webhook + moteur), déployé une fois en
+conteneur serverless (Cloud Run/Fly, scale-to-zero) — voir **`app/README.md`**. C'est
+le modèle des scanners pros (Snyk, Semgrep, GitGuardian).
+
+> `install-security-gate.sh` reste disponible comme **repli CI** (stub par repo) si
+> tu ne veux pas héberger de backend, mais ce n'est plus le chemin recommandé.
+

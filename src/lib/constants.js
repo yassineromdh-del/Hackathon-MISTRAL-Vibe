@@ -1,7 +1,7 @@
 export const REPO_OWNER = import.meta.env.VITE_GITHUB_OWNER || 'yassineromdh-del'
 export const REPO_NAME = import.meta.env.VITE_GITHUB_REPO || 'Hackathon-MISTRAL-Vibe'
-export const GITHUB_API_BASE = 'https://api.github.com'
-export const WORKFLOW_FILE = 'security-gate.yml'
+export const GITHUB_API_BASE = import.meta.env.VITE_GITHUB_API_BASE || 'https://api.github.com'
+export const WORKFLOW_FILE = import.meta.env.VITE_WORKFLOW_FILE || 'security-gate.yml'
 
 export const ROLES = {
   MAINTAINER: 'maintainer',

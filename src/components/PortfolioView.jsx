@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { ShieldCheck, ShieldAlert, ShieldQuestion, Plus, X, ChevronRight } from 'lucide-react'
-import { fetchGateReport } from '../lib/githubApi'
+import { getLatestReport } from '../lib/reportsStore'
 import { getRepos, addRepo, removeRepo } from '../lib/repos'
 
 const GRADE_STYLES = {
@@ -25,7 +25,7 @@ export default function PortfolioView({ repos, onOpen, onReposChange }) {
     let cancelled = false
     setLoading(true)
     Promise.all(
-      repos.map((full) => fetchGateReport(full).then((r) => [full, r]).catch(() => [full, null]))
+      repos.map((full) => getLatestReport(full).then((r) => [full, r]).catch(() => [full, null]))
     ).then((entries) => {
       if (!cancelled) { setReports(Object.fromEntries(entries)); setLoading(false) }
     })
